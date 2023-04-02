@@ -111,7 +111,7 @@ class Permutohedral():
         print("Checking on the length of each axis of the keys")
         print(lens_key)
 
-        offsets_key = np.ones((self.d, ))
+        offsets_key = np.ones((self.d, ), dtype=np.int32)
         offsets_key[:self.d - 1] = lens_key[1:][::-1].cumprod()[::-1] # (d, )
         
         print("Checking on offsets_keys")
@@ -234,22 +234,22 @@ class Permutohedral():
         print(perm)
 
         # ->> Blur
-        # j_range = np.arange(self.d, -1, -1) if reverse else np.arange(self.d + 1)
+        j_range = np.arange(self.d, -1, -1) if reverse else np.arange(self.d + 1)
         
-        # for j in j_range:
-        #     n1s = self.blur_neighbors[..., j, 0]  # [M, ]
-        #     n2s = self.blur_neighbors[..., j, 1]  # [M, ]
-        #     n1_vals = values[n1s]  # [M, value_size]
-        #     n2_vals = values[n2s]  # [M, value_size]
+        for j in j_range:
+            n1s = self.blur_neighbors[..., j, 0]  # [M, ]
+            n2s = self.blur_neighbors[..., j, 1]  # [M, ]
+            n1_vals = values[n1s]  # [M, value_size]
+            n2_vals = values[n2s]  # [M, value_size]
 
-        #     n1_vals = values[1:self.M - 1]
+            n1_vals = values[1:self.M - 1]
 
-        #     values[1:self.M + 1] += 0.5 * (n1_vals + n2_vals)
+            values[1:self.M + 1] += 0.5 * (n1_vals + n2_vals)
 
-        for _ in range(self.d):
-            values[:] = np.concatenate([values[:1], (values[:-2] + values[2:]) * .5, values[-1:]])
-            values = values.transpose(perm)
-            print(values.shape)
+        # for _ in range(self.d):
+        #     values[:] = np.concatenate([values[:1], (values[:-2] + values[2:]) * .5, values[-1:]])
+        #     values = values.transpose(perm)
+        #     print(values.shape)
 
         values = values.reshape((-1, value_size))
         # ->> Slice
