@@ -4,7 +4,6 @@
 """
 
 import numpy as np
-from collections import defaultdict
 
 class Permutohedral():
     def __init__(self, N, d) -> None:
@@ -46,7 +45,7 @@ class Permutohedral():
         self.d_mat = d_mat  # (d + 1, d + 1)
         self.diagone = diagone  # (d + 1, d + 1)
 
-        self.deltas = None
+        self.blur_neighbors = None
         self.os = None
         self.ws = None
 
@@ -112,7 +111,7 @@ class Permutohedral():
         print(lens_key)
 
         offsets_key = np.ones((self.d, ), dtype=np.int32)
-        offsets_key[:self.d - 1] = lens_key[1:][::-1].cumprod()[::-1] # (d, )
+        offsets_key[:self.d - 1] = lens_key[1:][::-1].cumprod()[::-1] # (d, ), row-major
         
         print("Checking on offsets_keys")
         print(offsets_key)
@@ -199,20 +198,29 @@ class Permutohedral():
         #     self.blur_neighbors[i, 1] = hash_table[sn2]
 
         # Shift all values by 1 such that -1 -> 0 (used for blurring)
+        min_coords_1d, max_coords_1d = np.min(coords_1d_uniq), np.max(coords_1d_uniq)
+        coords_1d -= min_coords_1d # start with 0
+        
+        blur_neighbors = np.zeros((self.M, self.d + 1, 2), dtype=np.int32) # (M, d + 1, 2)
+        blur_neighbors[..., 0] = n1s
+        blur_neighbors[..., 1] = n2s
+        blur_neighbors[blur_neighbors < min_coords_1d] = min_coords_1d # truncate
+        blur_neighbors[blur_neighbors > max_coords_1d] = max_coords_1d # truncate
+        blur_neighbors -= min_coords_1d # start with 0
+
         self.os = coords_1d # (N * (d + 1), )
         self.ws = barycentrics[..., :self.d + 1].reshape(-1) # (N * (d + 1), )
-        self.blur_neighbors = np.zeros((self.M, self.d + 1, 2), dtype=np.int32) # (M, d + 1, 2)
-        self.blur_neighbors[..., 0] = n1s
-        self.blur_neighbors[..., 1] = n2s
+        self.blur_neighbors = blur_neighbors
+        # self.blur_neighbors[..., 0] = n1s
+        # self.blur_neighbors[..., 1] = n2s
 
-        min_coords_1d, max_coords_1d = np.min(coords_1d_uniq), np.max(coords_1d_uniq)
-        self.os -= min_coords_1d # start with 0
-        self.blur_neighbors -= min_coords_1d # attempt to start with 0
-        self.blur_neighbors[self.blur_neighbors < 0] = 0 # start with 0
-        self.blur_neighbors[self.blur_neighbors > max_coords_1d] = max_coords_1d # end with maximum
-        # self.deltas = deltas_keys # (d, )
-        # self.M = deltas_keys.prod()
-        # self.blur_neighbors = self.blur_neighbors.reshape((self.M, self.d + 1, 2)) + 1 # (M, d + 1, 2)
+        
+        # self.blur_neighbors -= min_coords_1d # attempt to start with 0
+        # self.blur_neighbors[self.blur_neighbors < 0] = 0 # start with 0
+        # self.blur_neighbors[self.blur_neighbors > max_coords_1d] = max_coords_1d # end with maximum
+        # # self.deltas = deltas_keys # (d, )
+        # # self.M = deltas_keys.prod()
+        # # self.blur_neighbors = self.blur_neighbors.reshape((self.M, self.d + 1, 2)) + 1 # (M, d + 1, 2)
 
 
     def compute(self, inp, reverse=False):
@@ -220,18 +228,13 @@ class Permutohedral():
         Compute.
         """
         value_size = inp.shape[1]
-        values = np.zeros((self.M, value_size), dtype=np.float32)
+        values = np.zeros((self.M + 2, value_size), dtype=np.float32)
 
         # ->> Splat
         for v in np.arange(value_size):
             ch = np.repeat(inp[..., v:v + 1], repeats=self.d + 1, axis=-1) # (N, d + 1)
             ch = ch.reshape(-1) # (N * (d + 1), )
-            values[..., v] = np.bincount(self.os, weights=ch * self.ws, minlength=self.M)
-
-        values = values.reshape(*self.deltas, value_size) # rank is d + 1
-        perm = list(range(1, self.d)) + [0] + [self.d] # roll the first axis to the second last, e.g. [1, 2, 3, 4, 0, 5]
-        print("checking on perm...")
-        print(perm)
+            values[..., v] = np.bincount(self.os, weights=ch * self.ws, minlength=self.M + 2)
 
         # ->> Blur
         j_range = np.arange(self.d, -1, -1) if reverse else np.arange(self.d + 1)
@@ -242,16 +245,8 @@ class Permutohedral():
             n1_vals = values[n1s]  # [M, value_size]
             n2_vals = values[n2s]  # [M, value_size]
 
-            n1_vals = values[1:self.M - 1]
-
             values[1:self.M + 1] += 0.5 * (n1_vals + n2_vals)
 
-        # for _ in range(self.d):
-        #     values[:] = np.concatenate([values[:1], (values[:-2] + values[2:]) * .5, values[-1:]])
-        #     values = values.transpose(perm)
-        #     print(values.shape)
-
-        values = values.reshape((-1, value_size))
         # ->> Slice
         out = self.ws[..., np.newaxis] * values[self.os] * self.alpha # (N * (d + 1), value_size)
         out = out.reshape((self.N, self.d + 1, value_size)) # (N, d + 1, value_size)
