@@ -133,7 +133,7 @@ class Permutohedral():
         # coords_1d_uniq, offsets = np.unique(coords_1d, return_inverse=True)
         # self.M = coords_1d_uniq.shape[0]
 
-        coords_1d_uniq = np.unique(coords_1d)
+        coords_1d_uniq, offsets = np.unique(coords_1d, return_inverse=True)
         self.M = coords_1d_uniq.shape[0]
 
         # Find the neighbors of each lattice point
@@ -148,8 +148,21 @@ class Permutohedral():
         n2s = np.repeat(coords_1d_uniq[:, np.newaxis], repeats=self.d + 1, axis=1) + offsets_key.sum() # (M, d + 1)
         n1s += ((self.d_mat[np.newaxis, ..., :self.d] + self.diagone[np.newaxis, ..., :self.d]) * offsets_key[np.newaxis, np.newaxis, ...]).sum(axis=-1) # (M, d + 1)
         n2s -= ((self.d_mat[np.newaxis, ..., :self.d] + self.diagone[np.newaxis, ..., :self.d]) * offsets_key[np.newaxis, np.newaxis, ...]).sum(axis=-1) # (M, d + 1)
-        # n1s = n1s.reshape((-1, )) # (M * (d + 1))
-        # n2s = n2s.reshape((-1, )) # (M * (d + 1))
+        n1s = n1s.reshape((-1, )) # (M * (d + 1))
+        n2s = n2s.reshape((-1, )) # (M * (d + 1))
+
+        blur_neighbors = np.zeros((self.M * (self.d + 1), 2), dtype=np.int32) # (M * (d + 1), 2)
+        
+        def f_idx(n):
+            inds = np.where(n == coords_1d_uniq)[0]
+            if inds.shape[0] == 0:
+                return -1
+            else:
+                return inds[0]
+            
+        blur_neighbors[..., 0] = list(map(f_idx, n1s))
+        blur_neighbors[..., 1] = list(map(f_idx, n2s))
+        blur_neighbors = blur_neighbors.reshape((self.M, self.d + 1, 2))
 
         # n1s = np.repeat(coord1ds_uniq[:, np.newaxis], repeats=self.d + 1, axis=1) - (offsets_keys.sum() + 1) # (M, d + 1)
         # n2s = np.repeat(coord1ds_uniq[:, np.newaxis], repeats=self.d + 1, axis=1) + (offsets_keys.sum() + 1) # (M, d + 1)
@@ -198,19 +211,19 @@ class Permutohedral():
         #     self.blur_neighbors[i, 1] = hash_table[sn2]
 
         # Shift all values by 1 such that -1 -> 0 (used for blurring)
-        min_coords_1d, max_coords_1d = np.min(coords_1d_uniq), np.max(coords_1d_uniq)
-        coords_1d -= min_coords_1d # start with 0
+        # min_coords_1d, max_coords_1d = np.min(coords_1d_uniq), np.max(coords_1d_uniq)
+        # coords_1d -= min_coords_1d # start with 0
         
-        blur_neighbors = np.zeros((self.M, self.d + 1, 2), dtype=np.int32) # (M, d + 1, 2)
-        blur_neighbors[..., 0] = n1s
-        blur_neighbors[..., 1] = n2s
-        blur_neighbors[blur_neighbors < min_coords_1d] = min_coords_1d # truncate
-        blur_neighbors[blur_neighbors > max_coords_1d] = max_coords_1d # truncate
-        blur_neighbors -= min_coords_1d # start with 0
+        
+        # blur_neighbors[..., 0] = n1s
+        # blur_neighbors[..., 1] = n2s
+        # blur_neighbors[blur_neighbors < min_coords_1d] = min_coords_1d # truncate
+        # blur_neighbors[blur_neighbors > max_coords_1d] = max_coords_1d # truncate
+        # blur_neighbors -= min_coords_1d # start with 0
 
-        self.os = coords_1d # (N * (d + 1), )
+        self.os = offsets + 1 # (N * (d + 1), ), start with 1, end with M
         self.ws = barycentrics[..., :self.d + 1].reshape(-1) # (N * (d + 1), )
-        self.blur_neighbors = blur_neighbors
+        self.blur_neighbors = blur_neighbors + 1
         # self.blur_neighbors[..., 0] = n1s
         # self.blur_neighbors[..., 1] = n2s
 
