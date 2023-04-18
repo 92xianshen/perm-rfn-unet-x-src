@@ -98,7 +98,7 @@ class Permutohedral():
 
         # Get keys (coordinates)
         keys = np.int32(rem0[..., np.newaxis, :self.d] + canonical_ext[..., :self.d]) # (N, d + 1, d)
-        keys = keys.reshape((-1, self.d)) # flatten (N * (d + 1), d)
+        keys = keys.reshape((-1, self.d)) # flatten, (N * (d + 1), d)
         maxs_key, mins_key = keys.max(axis=0), keys.min(axis=0) # (d, )
         
         print("Checking on the range of the keys...")
@@ -110,44 +110,29 @@ class Permutohedral():
         print("Checking on the length of each axis of the keys")
         print(lens_key)
 
-        offsets_key = np.ones((self.d, ), dtype=np.int32)
-        offsets_key[:self.d - 1] = lens_key[1:][::-1].cumprod()[::-1] # (d, ), row-major
+        dims_key = np.ones((self.d, ), dtype=np.int32)
+        dims_key[:self.d - 1] = lens_key[1:][::-1].cumprod()[::-1] # (d, ), row-major
         
-        print("Checking on offsets_keys")
-        print(offsets_key)
+        print("Checking on dims_key")
+        print(dims_key)
 
         # Key transformation
-        # coords_1d = (keys[..., :-1] * offsets_key[np.newaxis, ...]).sum(axis=1) + keys[..., -1] # (N * (d + 1), )
-        coords_1d = (keys * offsets_key[np.newaxis, ...]).sum(axis=1) # (N * (d + 1), )
-        # coords_1d = coords_1d - coords_1d.min() # (N * (d + 1), ), start with 0
-
-        # key0s = keys - mins_keys[np.newaxis, ...] + 1 # (N * (d + 1), d), start with 0, end with max - 1
-
-        # print("Checking on keys0")
-        # print(key0s.max(axis=0), key0s.min(axis=0))
-
-        # coord1ds = (key0s[..., :-1] * offsets_keys[np.newaxis, ...]).sum(axis=1) + key0s[..., -1] # (N * (d + 1), )
-        # print("Checking on offsets")
-        # print(coord1ds.max(), coord1ds.min())
-
-        # coords_1d_uniq, offsets = np.unique(coords_1d, return_inverse=True)
-        # self.M = coords_1d_uniq.shape[0]
+        coords_1d = (keys * dims_key[np.newaxis, ...]).sum(axis=1) # (N * (d + 1), )
+        print("Checking on coords_1d")
+        print("Max: ", coords_1d.max(), "Min: ", coords_1d.min())
 
         coords_1d_uniq, offsets = np.unique(coords_1d, return_inverse=True)
         self.M = coords_1d_uniq.shape[0]
+        print("`coords_1d_uniq` done.")
 
         # Find the neighbors of each lattice point
         # Get the number of vertices in the lattice
         # Create the neighborhood structure
         # For each of d+1 axes,
-        # trans = np.concatenate([offsets_key, [1]]) # (d, )
-        # n1s = np.repeat(coords_1d[:, np.newaxis], repeats=self.d + 1, axis=1) - np.concatenate([offsets_key, [1]])[np.newaxis, ...] # (N * (d + 1), d + 1), - 1
-        # n2s = np.repeat(coords_1d[:, np.newaxis], repeats=self.d + 1, axis=1) + np.concatenate([offsets_key, [1]])[np.newaxis, ...] # (N * (d + 1), d + 1), + 1
-
-        n1s = np.repeat(coords_1d_uniq[:, np.newaxis], repeats=self.d + 1, axis=1) - offsets_key.sum() # (M, d + 1)
-        n2s = np.repeat(coords_1d_uniq[:, np.newaxis], repeats=self.d + 1, axis=1) + offsets_key.sum() # (M, d + 1)
-        n1s += ((self.d_mat[np.newaxis, ..., :self.d] + self.diagone[np.newaxis, ..., :self.d]) * offsets_key[np.newaxis, np.newaxis, ...]).sum(axis=-1) # (M, d + 1)
-        n2s -= ((self.d_mat[np.newaxis, ..., :self.d] + self.diagone[np.newaxis, ..., :self.d]) * offsets_key[np.newaxis, np.newaxis, ...]).sum(axis=-1) # (M, d + 1)
+        n1s = np.repeat(coords_1d_uniq[:, np.newaxis], repeats=self.d + 1, axis=1) - dims_key.sum() # (M, d + 1)
+        n2s = np.repeat(coords_1d_uniq[:, np.newaxis], repeats=self.d + 1, axis=1) + dims_key.sum() # (M, d + 1)
+        n1s += ((self.d_mat[np.newaxis, ..., :self.d] + self.diagone[np.newaxis, ..., :self.d]) * dims_key[np.newaxis, np.newaxis, ...]).sum(axis=-1) # (M, d + 1)
+        n2s -= ((self.d_mat[np.newaxis, ..., :self.d] + self.diagone[np.newaxis, ..., :self.d]) * dims_key[np.newaxis, np.newaxis, ...]).sum(axis=-1) # (M, d + 1)
         n1s = n1s.reshape((-1, )) # (M * (d + 1))
         n2s = n2s.reshape((-1, )) # (M * (d + 1))
 
@@ -160,80 +145,15 @@ class Permutohedral():
             else:
                 return inds[0]
             
+        print("Getting `blur_neighbors`...")
         blur_neighbors[..., 0] = list(map(f_idx, n1s))
         blur_neighbors[..., 1] = list(map(f_idx, n2s))
         blur_neighbors = blur_neighbors.reshape((self.M, self.d + 1, 2))
-
-        # n1s = np.repeat(coord1ds_uniq[:, np.newaxis], repeats=self.d + 1, axis=1) - (offsets_keys.sum() + 1) # (M, d + 1)
-        # n2s = np.repeat(coord1ds_uniq[:, np.newaxis], repeats=self.d + 1, axis=1) + (offsets_keys.sum() + 1) # (M, d + 1)
-        # np.concatenate([self.d * offsets_keys, self.d, 0]) # (d + 1)
-        
-        # n1s += 
-
-        # n1s = keys0.reshape((self.N, self.d + 1, self.d)) - 1 # (N, d + 1, d)
-        # n2s = keys0.reshape((self.N, self.d + 1, self.d)) + 1 # (N, d + 1, d)
-        # n1s += (self.d_mat[np.newaxis, ..., :self.d] + self.diagone[np.newaxis, ..., :self.d]) # (N, d + 1, d)
-        # n2s -= (self.d_mat[np.newaxis, ..., :self.d] + self.diagone[np.newaxis, ..., :self.d]) # (N, d + 1, d)
-        # n1s = n1s.reshape((-1, self.d)) # (N * (d + 1), d)
-        # n2s = n2s.reshape((-1, self.d)) # (N * (d + 1), d)
-        # self.blur_neighbors = np.zeros((self.N * (self.d + 1), 2), dtype=np.int32)
-        # self.blur_neighbors[..., 0] = (n1s[..., :-1] * offsets_keys[np.newaxis, ...]).sum(axis=1) + n1s[..., -1] # (N * (d + 1), )
-        # self.blur_neighbors[..., 1] = (n2s[..., :-1] * offsets_keys[np.newaxis, ...]).sum(axis=1) + n2s[..., -1] # (N * (d + 1), )
-
-        # # Keys in string format.
-        # hkeys, offsets = np.unique(keys, return_inverse=True, axis=0) # (M, d), (N * (d + 1), )
-        # self.M = hkeys.shape[0] # Get M
-
-        # hash_table = defaultdict(lambda:-1)
-        # for i in range(self.M):
-        #     k, v = hkeys[i], i
-        #     sk = ','.join(k.astype(np.str))
-        #     hash_table[sk] = v
-
-        # # Find the neighbors of each lattice point
-        # # Get the number of vertices in the lattice
-        # # Create the neighborhood structure
-        # # For each of d+1 axes,
-        # n1s = np.repeat(hkeys[:, np.newaxis, :], repeats=self.d + 1, axis=1) - 1 # (M, d + 1, d)
-        # n2s = np.repeat(hkeys[:, np.newaxis, :], repeats=self.d + 1, axis=1) + 1 # (M, d + 1, d)
-        # n1s += (self.d_mat[np.newaxis, ..., :self.d] + self.diagone[np.newaxis, ..., :self.d]) # (M, d + 1, d)
-        # n2s -= (self.d_mat[np.newaxis, ..., :self.d] + self.diagone[np.newaxis, ..., :self.d]) # (M, d + 1, d)
-        # n1s = n1s.reshape((-1, self.d)) # (M * (d + 1), d)
-        # n2s = n2s.reshape((-1, self.d)) # (M * (d + 1), d)
-
-        # self.blur_neighbors = np.zeros((self.M * (self.d + 1), 2), dtype=np.int32) # (M * (d + 1), 2)
-
-        # for i in np.arange(n1s.shape[0]):
-        #     n1, n2 = n1s[i], n2s[i]
-        #     sn1 = ','.join(n1.astype(np.str))
-        #     sn2 = ','.join(n2.astype(np.str))
-        #     self.blur_neighbors[i, 0] = hash_table[sn1]
-        #     self.blur_neighbors[i, 1] = hash_table[sn2]
-
-        # Shift all values by 1 such that -1 -> 0 (used for blurring)
-        # min_coords_1d, max_coords_1d = np.min(coords_1d_uniq), np.max(coords_1d_uniq)
-        # coords_1d -= min_coords_1d # start with 0
-        
-        
-        # blur_neighbors[..., 0] = n1s
-        # blur_neighbors[..., 1] = n2s
-        # blur_neighbors[blur_neighbors < min_coords_1d] = min_coords_1d # truncate
-        # blur_neighbors[blur_neighbors > max_coords_1d] = max_coords_1d # truncate
-        # blur_neighbors -= min_coords_1d # start with 0
+        print("`blur_neighbors` done.")
 
         self.os = offsets + 1 # (N * (d + 1), ), start with 1, end with M
         self.ws = barycentrics[..., :self.d + 1].reshape(-1) # (N * (d + 1), )
         self.blur_neighbors = blur_neighbors + 1
-        # self.blur_neighbors[..., 0] = n1s
-        # self.blur_neighbors[..., 1] = n2s
-
-        
-        # self.blur_neighbors -= min_coords_1d # attempt to start with 0
-        # self.blur_neighbors[self.blur_neighbors < 0] = 0 # start with 0
-        # self.blur_neighbors[self.blur_neighbors > max_coords_1d] = max_coords_1d # end with maximum
-        # # self.deltas = deltas_keys # (d, )
-        # # self.M = deltas_keys.prod()
-        # # self.blur_neighbors = self.blur_neighbors.reshape((self.M, self.d + 1, 2)) + 1 # (M, d + 1, 2)
 
 
     def compute(self, inp, reverse=False):

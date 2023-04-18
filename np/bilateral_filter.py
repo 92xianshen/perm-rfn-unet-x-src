@@ -8,7 +8,7 @@ import matplotlib.pyplot as plt
 import cv2
 import time
 
-im = Image.open('../../data/lena.small.jpg')
+im = Image.open('../../data/lenna.png').convert("RGB")
 im = np.array(im) / 255.
 
 h, w, n_channels = im.shape
