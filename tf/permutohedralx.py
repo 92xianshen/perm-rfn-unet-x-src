@@ -54,7 +54,7 @@ class Permutohedral(tf.Module):
         self.os = None
         self.ws = None
 
-    # @tf.function
+    @tf.function
     def init(self, features):
         # Compute the simplex each feature lies in
         # !!! Shape of feature [N, d]
@@ -117,7 +117,8 @@ class Permutohedral(tf.Module):
         coords_1d = tf.reduce_sum(keys * dims_key[tf.newaxis, ...], axis=1) # [N * (d + 1), ]
 
         coords_1d_uniq, offsets = tf.unique(coords_1d)
-        self.M = coords_1d_uniq.shape[0]
+        # self.M = coords_1d_uniq.shape[0]
+        self.M = tf.shape(coords_1d_uniq)[0]
 
         # Find the neighbors of each lattice point
         # Get the number of vertices in the lattice
@@ -134,14 +135,17 @@ class Permutohedral(tf.Module):
         blur_neighbors_n2 = tf.constant(-1, dtype=tf.int32, shape=[self.M * (self.d + 1), ])
 
         for i in range(self.d + 1):
+            print("axis {}...".format(i + 1))
             ind_upd_n1 = tf.where(n1s[..., i:i + 1] == coords_1d_uniq[tf.newaxis, ...]) # inner [M, M], outer [M, 2]
+            ind_upd_n1 = tf.cast(ind_upd_n1, dtype=tf.int32)
             indices_n1 = ind_upd_n1[..., 0][..., tf.newaxis] + i * self.M # [M, 1]
-            updates_n1 = tf.cast(ind_upd_n1[..., 1], dtype=tf.int32) # [M, ]
+            updates_n1 = ind_upd_n1[..., 1] # [M, ]
             blur_neighbors_n1 = tf.tensor_scatter_nd_update(tensor=blur_neighbors_n1, indices=indices_n1, updates=updates_n1)
 
             ind_upd_n2 = tf.where(n2s[..., i:i + 1] == coords_1d_uniq[tf.newaxis, ...]) # inner [M, M], outer [M, 2]
+            ind_upd_n2 = tf.cast(ind_upd_n2, dtype=tf.int32)
             indices_n2 = ind_upd_n2[..., 0][..., tf.newaxis] + i * self.M # [M, 1]
-            updates_n2 = tf.cast(ind_upd_n2[..., 1], dtype=tf.int32) # [M, ]
+            updates_n2 = ind_upd_n2[..., 1] # [M, ]
             blur_neighbors_n2 = tf.tensor_scatter_nd_update(tensor=blur_neighbors_n2, indices=indices_n2, updates=updates_n2)
 
         
@@ -163,7 +167,7 @@ class Permutohedral(tf.Module):
         self.ws = tf.reshape(barycentric[..., : self.d + 1], shape=[-1, ])  # [N x (d + 1), ]
         self.blur_neighbors = blur_neighbors + 1
 
-    # @tf.function
+    @tf.function
     def seq_compute(self, inp, value_size, reverse):
         """
         Compute sequentially.
