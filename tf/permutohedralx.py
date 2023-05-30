@@ -3,6 +3,8 @@
 - `tf.float32` and `tf.int32` as default float and integer types, respectively.
 - Refine the source code
 - Update of v3: refine the key size, d + 1 ->> d
+
+- 2023.05.30: Move the computation of "blur_neighbor*" to "compute()", unfortunately time-consuming, negative result. 
 """
 
 import numpy as np
@@ -54,7 +56,7 @@ class Permutohedral(tf.Module):
         self.os = None
         self.ws = None
 
-    @tf.function
+    # @tf.function
     def init(self, features):
         # Compute the simplex each feature lies in
         # !!! Shape of feature [N, d]
@@ -117,57 +119,53 @@ class Permutohedral(tf.Module):
         coords_1d = tf.reduce_sum(keys * dims_key[tf.newaxis, ...], axis=1) # [N * (d + 1), ]
 
         coords_1d_uniq, offsets = tf.unique(coords_1d)
-        # self.M = coords_1d_uniq.shape[0]
-        self.M = tf.shape(coords_1d_uniq)[0]
+        self.M = coords_1d_uniq.shape[0]
+        # self.M = tf.shape(coords_1d_uniq)[0]
 
-        # Find the neighbors of each lattice point
-        # Get the number of vertices in the lattice
-        # Create the neighborhood structure
-        # For each of d+1 axes,
-        n1s = tf.tile(coords_1d_uniq[:, tf.newaxis], [1, self.d + 1]) - tf.reduce_sum(dims_key, axis=0) # [M, d + 1]
-        n2s = tf.tile(coords_1d_uniq[:, tf.newaxis], [1, self.d + 1]) + tf.reduce_sum(dims_key, axis=0) # [M, d + 1]
-        n1s = n1s + tf.reduce_sum((self.d_mat[tf.newaxis, ..., :self.d] + self.diagone[tf.newaxis, ..., :self.d]) * dims_key[tf.newaxis, tf.newaxis, ...], axis=-1) # [M, d + 1]
-        n2s = n2s - tf.reduce_sum((self.d_mat[tf.newaxis, ..., :self.d] + self.diagone[tf.newaxis, ..., :self.d]) * dims_key[tf.newaxis, tf.newaxis, ...], axis=-1) # [M, d + 1]
+        # # Find the neighbors of each lattice point
+        # # Get the number of vertices in the lattice
+        # # Create the neighborhood structure
+        # # For each of d+1 axes,
+        # n1s = tf.tile(coords_1d_uniq[:, tf.newaxis], [1, self.d + 1]) - tf.reduce_sum(dims_key, axis=0) # [M, d + 1]
+        # n2s = tf.tile(coords_1d_uniq[:, tf.newaxis], [1, self.d + 1]) + tf.reduce_sum(dims_key, axis=0) # [M, d + 1]
+        # n1s = n1s + tf.reduce_sum((self.d_mat[tf.newaxis, ..., :self.d] + self.diagone[tf.newaxis, ..., :self.d]) * dims_key[tf.newaxis, tf.newaxis, ...], axis=-1) # [M, d + 1]
+        # n2s = n2s - tf.reduce_sum((self.d_mat[tf.newaxis, ..., :self.d] + self.diagone[tf.newaxis, ..., :self.d]) * dims_key[tf.newaxis, tf.newaxis, ...], axis=-1) # [M, d + 1]
 
-        # n1s = tf.reshape(n1s, shape=[-1, ]) # [M * (d + 1), ]
-        # n2s = tf.reshape(n2s, shape=[-1, ]) # [M * (d + 1), ]
-        blur_neighbors_n1 = tf.constant(-1, dtype=tf.int32, shape=[self.M * (self.d + 1), ]) # [M * (d + 1), ]
-        blur_neighbors_n2 = tf.constant(-1, dtype=tf.int32, shape=[self.M * (self.d + 1), ])
+        # # n1s = tf.reshape(n1s, shape=[-1, ]) # [M * (d + 1), ]
+        # # n2s = tf.reshape(n2s, shape=[-1, ]) # [M * (d + 1), ]
+        # blur_neighbors_n1 = tf.constant(-1, dtype=tf.int32, shape=[self.M * (self.d + 1), ]) # [M * (d + 1), ]
+        # blur_neighbors_n2 = tf.constant(-1, dtype=tf.int32, shape=[self.M * (self.d + 1), ])
 
-        for i in range(self.d + 1):
-            print("axis {}...".format(i + 1))
-            ind_upd_n1 = tf.where(n1s[..., i:i + 1] == coords_1d_uniq[tf.newaxis, ...]) # inner [M, M], outer [M, 2]
-            ind_upd_n1 = tf.cast(ind_upd_n1, dtype=tf.int32)
-            indices_n1 = ind_upd_n1[..., 0][..., tf.newaxis] + i * self.M # [M, 1]
-            updates_n1 = ind_upd_n1[..., 1] # [M, ]
-            blur_neighbors_n1 = tf.tensor_scatter_nd_update(tensor=blur_neighbors_n1, indices=indices_n1, updates=updates_n1)
+        # for i in range(self.d + 1):
+        #     print("axis {}...".format(i + 1))
+            
+        #     n1 = coords_1d_uniq - tf.reduce_sum(dims_key, axis=0) # [M, ]
+        #     n1 = n1 + tf.reduce_sum((self.d_mat[i, :self.d] + self.diagone[i, :self.d]) * dims_key) # [M, ]
+        #     ind_upd_n1 = tf.where(n1s[..., i:i + 1] == coords_1d_uniq[tf.newaxis, ...]) # inner [M, M], outer [M, 2]
+        #     ind_upd_n1 = tf.cast(ind_upd_n1, dtype=tf.int32)
+        #     indices_n1 = ind_upd_n1[..., 0][..., tf.newaxis] + i * self.M # [M, 1]
+        #     updates_n1 = ind_upd_n1[..., 1] # [M, ]
+        #     blur_neighbors_n1 = tf.tensor_scatter_nd_update(tensor=blur_neighbors_n1, indices=indices_n1, updates=updates_n1)
 
-            ind_upd_n2 = tf.where(n2s[..., i:i + 1] == coords_1d_uniq[tf.newaxis, ...]) # inner [M, M], outer [M, 2]
-            ind_upd_n2 = tf.cast(ind_upd_n2, dtype=tf.int32)
-            indices_n2 = ind_upd_n2[..., 0][..., tf.newaxis] + i * self.M # [M, 1]
-            updates_n2 = ind_upd_n2[..., 1] # [M, ]
-            blur_neighbors_n2 = tf.tensor_scatter_nd_update(tensor=blur_neighbors_n2, indices=indices_n2, updates=updates_n2)
+        #     n2 = coords_1d_uniq + tf.reduce_sum(dims_key, axis=0) # [M, ]
+        #     n2 = n2 - tf.reduce_sum((self.d_mat[i, :self.d] + self.diagone[i, :self.d]) * dims_key) # [M, ]
+        #     ind_upd_n2 = tf.where(n2s[..., i:i + 1] == coords_1d_uniq[tf.newaxis, ...]) # inner [M, M], outer [M, 2]
+        #     ind_upd_n2 = tf.cast(ind_upd_n2, dtype=tf.int32)
+        #     indices_n2 = ind_upd_n2[..., 0][..., tf.newaxis] + i * self.M # [M, 1]
+        #     updates_n2 = ind_upd_n2[..., 1] # [M, ]
+        #     blur_neighbors_n2 = tf.tensor_scatter_nd_update(tensor=blur_neighbors_n2, indices=indices_n2, updates=updates_n2)
 
-        
-        # ind_upd_n1 = tf.where(n1s[..., tf.newaxis] == coords_1d_uniq[tf.newaxis, ...]) # inner [M * (d + 1), M], outer [M * (d + 1), 2]
-        # indices_n1 = ind_upd_n1[..., 0][..., tf.newaxis] # [M * (d + 1), 1]
-        # updates_n1 = tf.cast(ind_upd_n1[..., 1], dtype=tf.int32) # [M * (d + 1), ]
-        # blur_neighbors_n1 = tf.tensor_scatter_nd_update(tensor=blur_neighbors_n1, indices=indices_n1, updates=updates_n1) # [M * (d + 1), ]
-
-        # ind_upd_n2 = tf.where(n2s[..., tf.newaxis] == coords_1d_uniq[tf.newaxis, ...]) # inner [M * (d + 1), M], outer [M * (d + 1), 2]
-        # indices_n2 = ind_upd_n2[..., 0][..., tf.newaxis] # [M * (d + 1), 1]
-        # updates_n2 = tf.cast(ind_upd_n2[..., 1], dtype=tf.int32) # [M * (d + 1), ]
-        # blur_neighbors_n2 = tf.tensor_scatter_nd_update(tensor=blur_neighbors_n2, indices=indices_n2, updates=updates_n2)
-
-        blur_neighbors = tf.stack([blur_neighbors_n1, blur_neighbors_n2], axis=-1) # [M * (d + 1), 2]
-        blur_neighbors = tf.reshape(blur_neighbors, shape=[self.d + 1, self.M, 2]) # [M, d + 1, 2]
+        # blur_neighbors = tf.stack([blur_neighbors_n1, blur_neighbors_n2], axis=-1) # [M * (d + 1), 2]
+        # blur_neighbors = tf.reshape(blur_neighbors, shape=[self.d + 1, self.M, 2]) # [M, d + 1, 2]
 
         # Shift all values by 1 such that -1 -> 0 (used for blurring)
-        self.os = (tf.reshape(offsets, shape=[-1, ]) + 1)  # [N X (d + 1), ]
+        self.os = tf.reshape(offsets, shape=[-1, ]) + 1  # [N X (d + 1), ]
         self.ws = tf.reshape(barycentric[..., : self.d + 1], shape=[-1, ])  # [N x (d + 1), ]
-        self.blur_neighbors = blur_neighbors + 1
+        self.coords_1d_uniq = coords_1d_uniq
+        self.dims_key = dims_key
+        # self.blur_neighbors = blur_neighbors + 1
 
-    @tf.function
+    # @tf.function
     def seq_compute(self, inp, value_size, reverse):
         """
         Compute sequentially.
@@ -211,10 +209,27 @@ class Permutohedral(tf.Module):
         idx_nv = tf.range(1, self.M + 1)  # [M, ]
         
         for j in j_range:
-            n1s = self.blur_neighbors[j, ..., 0]  # [M, ]
-            n2s = self.blur_neighbors[j, ..., 1]  # [M, ]
-            n1_vals = tf.gather(values, n1s)  # [M, value_size]
-            n2_vals = tf.gather(values, n2s)  # [M, value_size]
+            n1 = self.coords_1d_uniq - tf.reduce_sum(self.dims_key, axis=0) # [M, ]
+            n1 = n1 + tf.reduce_sum((self.d_mat[j, :self.d] + self.diagone[j, :self.d]) * self.dims_key) # [M, ]
+            ind_upd_n1 = tf.where(n1[..., tf.newaxis] == self.coords_1d_uniq[tf.newaxis, ...]) # inner [M, M], outer [M, 2]
+            ind_upd_n1 = tf.cast(ind_upd_n1, dtype=tf.int32)
+            indices_n1 = ind_upd_n1[..., 0][..., tf.newaxis] # [M, ]
+            updates_n1 = ind_upd_n1[..., 1] # [M, ]
+            blur_neighbor_1 = tf.constant(-1, dtype=tf.int32, shape=[self.M, ]) # [M * (d + 1), ]
+            blur_neighbor_1 = tf.tensor_scatter_nd_update(tensor=blur_neighbor_1, indices=indices_n1, updates=updates_n1) + 1
+            n1_vals = tf.gather(params=values, indices=blur_neighbor_1)  # [M, value_size]
+            print(n1_vals.shape)
+
+            n2 = self.coords_1d_uniq + tf.reduce_sum(self.dims_key, axis=0) # [M, ]
+            n2 = n2 - tf.reduce_sum((self.d_mat[j, :self.d] + self.diagone[j, :self.d]) * self.dims_key) # [M, ]
+            ind_upd_n2 = tf.where(n2[..., tf.newaxis] == self.coords_1d_uniq[tf.newaxis, ...]) # inner [M, M], outer [M, 2]
+            ind_upd_n2 = tf.cast(ind_upd_n2, dtype=tf.int32)
+            indices_n2 = ind_upd_n2[..., 0][..., tf.newaxis] # [M, ]
+            updates_n2 = ind_upd_n2[..., 1] # [M, ]
+            blur_neighbor_2 = tf.constant(-1, dtype=tf.int32, shape=[self.M, ]) # [M * (d + 1), ]
+            blur_neighbor_2 = tf.tensor_scatter_nd_update(tensor=blur_neighbor_2, indices=indices_n2, updates=updates_n2) + 1
+            n2_vals = tf.gather(params=values, indices=blur_neighbor_2) # [M, value_size]
+            print(n1_vals.shape)
 
             values = tf.tensor_scatter_nd_add(
                 tensor=values,
