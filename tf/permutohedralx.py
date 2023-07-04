@@ -53,7 +53,7 @@ class Permutohedral(tf.Module):
         self.d_mat = tf.constant(d_mat, dtype=tf.int32)  # [d + 1, d + 1]
         self.diagone = tf.constant(diagone, dtype=tf.int32)  # [d + 1, d + 1]
 
-        self.blur_neighbors = tf.Variable(tf.constant(-1, dtype=tf.int32, shape=[self.N, self.d + 1, 2]), trainable=False) # [N, (d + 1), 2]
+        self.blur_neighbors = tf.Variable(tf.constant(-1, dtype=tf.int32, shape=[2, self.N, self.d + 1]), trainable=False) # [N, (d + 1), 2]
         self.os = tf.Variable(tf.zeros(shape=[self.N * (self.d + 1), ], dtype=tf.int32), trainable=False) # [N x (d + 1), ]
         self.ws = tf.Variable(tf.zeros(shape=[self.N * (self.d + 1), ], dtype=tf.float32), trainable=False)  # [N x (d + 1), ]
 
@@ -133,13 +133,13 @@ class Permutohedral(tf.Module):
         n1s = n1s + tf.reduce_sum((self.d_mat[tf.newaxis, ..., :self.d] + self.diagone[tf.newaxis, ..., :self.d]) * dims_key[tf.newaxis, tf.newaxis, ...], axis=-1) # [M, d + 1]
         n2s = n2s - tf.reduce_sum((self.d_mat[tf.newaxis, ..., :self.d] + self.diagone[tf.newaxis, ..., :self.d]) * dims_key[tf.newaxis, tf.newaxis, ...], axis=-1) # [M, d + 1]
 
-        self.blur_neighbors[:self.M, ..., 0].assign(hash_table.lookup(n1s)) # [M, d + 1]
-        self.blur_neighbors[:self.M, ..., 1].assign(hash_table.lookup(n2s)) # [M, d + 1]
+        self.blur_neighbors[0, :self.M, ...].assign(hash_table.lookup(n1s)) # [M, d + 1]
+        self.blur_neighbors[1, :self.M, ...].assign(hash_table.lookup(n2s)) # [M, d + 1]
 
         # Shift all values by 1 such that -1 -> 0 (used for blurring)
         self.os.assign(tf.reshape(offsets, shape=[-1, ]) + 1)  # [N X (d + 1), ]
         self.ws.assign(tf.reshape(barycentric[..., : self.d + 1], shape=[-1, ]))  # [N x (d + 1), ]
-        self.blur_neighbors.assign_add(tf.ones(shape=[self.N, self.d + 1, 2], dtype=tf.int32))
+        self.blur_neighbors.assign_add(tf.ones(shape=[2, self.N, self.d + 1], dtype=tf.int32))
 
     @tf.function
     def seq_compute(self, inp, value_size, reverse):
@@ -185,8 +185,8 @@ class Permutohedral(tf.Module):
         idx_nv = tf.range(1, self.M + 1)  # [M, ]
         
         for j in j_range:
-            n1s = self.blur_neighbors[:self.M, j, 0]  # [M, ]
-            n2s = self.blur_neighbors[:self.M, j, 1]  # [M, ]
+            n1s = self.blur_neighbors[0, :self.M, j]  # [M, ]
+            n2s = self.blur_neighbors[1, :self.M, j]  # [M, ]
             n1_vals = tf.gather(values, n1s)  # [M, value_size]
             n2_vals = tf.gather(values, n2s)  # [M, value_size]
 
