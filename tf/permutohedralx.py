@@ -3,6 +3,8 @@
 - `tf.float32` and `tf.int32` as default float and integer types, respectively.
 - Refine the source code
 - Update of v3: refine the key size, d + 1 ->> d
+
+- 2023.07.04: Use `tf.lookup.StaticHashTable`.
 """
 
 import numpy as np
@@ -51,7 +53,7 @@ class Permutohedral(tf.Module):
         self.d_mat = tf.constant(d_mat, dtype=tf.int32)  # [d + 1, d + 1]
         self.diagone = tf.constant(diagone, dtype=tf.int32)  # [d + 1, d + 1]
 
-        self.blur_neighbors = tf.Variable(tf.constant(-1, dtype=tf.int32, shape=[self.d + 1, self.N, 2]), trainable=False)
+        self.blur_neighbors = tf.Variable(tf.constant(-1, dtype=tf.int32, shape=[self.N, self.d + 1, 2]), trainable=False) # [N, (d + 1), 2]
         self.os = tf.Variable(tf.zeros(shape=[self.N * (self.d + 1), ], dtype=tf.int32), trainable=False) # [N x (d + 1), ]
         self.ws = tf.Variable(tf.zeros(shape=[self.N * (self.d + 1), ], dtype=tf.float32), trainable=False)  # [N x (d + 1), ]
 
@@ -118,8 +120,9 @@ class Permutohedral(tf.Module):
         coords_1d = tf.reduce_sum(keys * dims_key[tf.newaxis, ...], axis=1) # [N * (d + 1), ]
 
         coords_1d_uniq, offsets = tf.unique(coords_1d)
-        # self.M = coords_1d_uniq.shape[0]
         self.M.assign(tf.shape(coords_1d_uniq)[0])
+        # ->> `trial2`: Use hash table.
+        hash_table = tf.lookup.StaticHashTable(tf.lookup.KeyValueTensorInitializer(coords_1d_uniq, tf.range(self.M, dtype=tf.int32)), default_value=-1)
 
         # Find the neighbors of each lattice point
         # Get the number of vertices in the lattice
@@ -130,28 +133,13 @@ class Permutohedral(tf.Module):
         n1s = n1s + tf.reduce_sum((self.d_mat[tf.newaxis, ..., :self.d] + self.diagone[tf.newaxis, ..., :self.d]) * dims_key[tf.newaxis, tf.newaxis, ...], axis=-1) # [M, d + 1]
         n2s = n2s - tf.reduce_sum((self.d_mat[tf.newaxis, ..., :self.d] + self.diagone[tf.newaxis, ..., :self.d]) * dims_key[tf.newaxis, tf.newaxis, ...], axis=-1) # [M, d + 1]
 
-        blur_neighbors_n1 = tf.constant(-1, dtype=tf.int32, shape=[self.N, ]) # [M * (d + 1), ]
-        blur_neighbors_n2 = tf.constant(-1, dtype=tf.int32, shape=[self.N, ])
-
-        for i in range(self.d + 1):
-            ind_upd_n1 = tf.where(n1s[..., i:i + 1] == coords_1d_uniq[tf.newaxis, ...]) # inner [M, M], outer [M, 2]
-            ind_upd_n1 = tf.cast(ind_upd_n1, dtype=tf.int32) # [M, 1]
-            indices_n1 = ind_upd_n1[..., 0][..., tf.newaxis] # [M, ]
-            updates_n1 = ind_upd_n1[..., 1] # [M, ]
-            blur_neighbors_n1 = tf.tensor_scatter_nd_update(tensor=blur_neighbors_n1, indices=indices_n1, updates=updates_n1)
-            self.blur_neighbors[i, ..., 0].assign(blur_neighbors_n1)
-
-            ind_upd_n2 = tf.where(n2s[..., i:i + 1] == coords_1d_uniq[tf.newaxis, ...]) # inner [M, M], outer [M, 2]
-            ind_upd_n2 = tf.cast(ind_upd_n2, dtype=tf.int32) # [M, 1]
-            indices_n2 = ind_upd_n2[..., 0][..., tf.newaxis] # [M, ]
-            updates_n2 = ind_upd_n2[..., 1] # [M, ]
-            blur_neighbors_n2 = tf.tensor_scatter_nd_update(tensor=blur_neighbors_n2, indices=indices_n2, updates=updates_n2)
-            self.blur_neighbors[i, ..., 1].assign(blur_neighbors_n2)
+        self.blur_neighbors[:self.M, ..., 0].assign(hash_table.lookup(n1s)) # [M, d + 1]
+        self.blur_neighbors[:self.M, ..., 1].assign(hash_table.lookup(n2s)) # [M, d + 1]
 
         # Shift all values by 1 such that -1 -> 0 (used for blurring)
         self.os.assign(tf.reshape(offsets, shape=[-1, ]) + 1)  # [N X (d + 1), ]
         self.ws.assign(tf.reshape(barycentric[..., : self.d + 1], shape=[-1, ]))  # [N x (d + 1), ]
-        self.blur_neighbors.assign_add(tf.ones(shape=[self.d + 1, self.N, 2], dtype=tf.int32))
+        self.blur_neighbors.assign_add(tf.ones(shape=[self.N, self.d + 1, 2], dtype=tf.int32))
 
     @tf.function
     def seq_compute(self, inp, value_size, reverse):
@@ -197,8 +185,8 @@ class Permutohedral(tf.Module):
         idx_nv = tf.range(1, self.M + 1)  # [M, ]
         
         for j in j_range:
-            n1s = self.blur_neighbors[j, :self.M, 0]  # [M, ]
-            n2s = self.blur_neighbors[j, :self.M, 1]  # [M, ]
+            n1s = self.blur_neighbors[:self.M, j, 0]  # [M, ]
+            n2s = self.blur_neighbors[:self.M, j, 1]  # [M, ]
             n1_vals = tf.gather(values, n1s)  # [M, value_size]
             n2_vals = tf.gather(values, n2s)  # [M, value_size]
 
