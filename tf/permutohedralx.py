@@ -134,41 +134,23 @@ class Permutohedral(tf.Module):
         blur_neighbors_n2 = tf.constant(-1, dtype=tf.int32, shape=[self.N, ])
 
         for i in range(self.d + 1):
-            # print("axis {}...".format(i + 1))
             ind_upd_n1 = tf.where(n1s[..., i:i + 1] == coords_1d_uniq[tf.newaxis, ...]) # inner [M, M], outer [M, 2]
-            ind_upd_n1 = tf.cast(ind_upd_n1, dtype=tf.int32)
-            # indices_n1 = ind_upd_n1[..., 0][..., tf.newaxis] + i * self.M # [M, 1]
+            ind_upd_n1 = tf.cast(ind_upd_n1, dtype=tf.int32) # [M, 1]
             indices_n1 = ind_upd_n1[..., 0][..., tf.newaxis] # [M, ]
             updates_n1 = ind_upd_n1[..., 1] # [M, ]
             blur_neighbors_n1 = tf.tensor_scatter_nd_update(tensor=blur_neighbors_n1, indices=indices_n1, updates=updates_n1)
             self.blur_neighbors[i, ..., 0].assign(blur_neighbors_n1)
 
             ind_upd_n2 = tf.where(n2s[..., i:i + 1] == coords_1d_uniq[tf.newaxis, ...]) # inner [M, M], outer [M, 2]
-            ind_upd_n2 = tf.cast(ind_upd_n2, dtype=tf.int32)
-            # indices_n2 = ind_upd_n2[..., 0][..., tf.newaxis] + i * self.M # [M, 1]
+            ind_upd_n2 = tf.cast(ind_upd_n2, dtype=tf.int32) # [M, 1]
             indices_n2 = ind_upd_n2[..., 0][..., tf.newaxis] # [M, ]
             updates_n2 = ind_upd_n2[..., 1] # [M, ]
             blur_neighbors_n2 = tf.tensor_scatter_nd_update(tensor=blur_neighbors_n2, indices=indices_n2, updates=updates_n2)
             self.blur_neighbors[i, ..., 1].assign(blur_neighbors_n2)
 
-        
-        # ind_upd_n1 = tf.where(n1s[..., tf.newaxis] == coords_1d_uniq[tf.newaxis, ...]) # inner [M * (d + 1), M], outer [M * (d + 1), 2]
-        # indices_n1 = ind_upd_n1[..., 0][..., tf.newaxis] # [M * (d + 1), 1]
-        # updates_n1 = tf.cast(ind_upd_n1[..., 1], dtype=tf.int32) # [M * (d + 1), ]
-        # blur_neighbors_n1 = tf.tensor_scatter_nd_update(tensor=blur_neighbors_n1, indices=indices_n1, updates=updates_n1) # [M * (d + 1), ]
-
-        # ind_upd_n2 = tf.where(n2s[..., tf.newaxis] == coords_1d_uniq[tf.newaxis, ...]) # inner [M * (d + 1), M], outer [M * (d + 1), 2]
-        # indices_n2 = ind_upd_n2[..., 0][..., tf.newaxis] # [M * (d + 1), 1]
-        # updates_n2 = tf.cast(ind_upd_n2[..., 1], dtype=tf.int32) # [M * (d + 1), ]
-        # blur_neighbors_n2 = tf.tensor_scatter_nd_update(tensor=blur_neighbors_n2, indices=indices_n2, updates=updates_n2)
-
-        # blur_neighbors = tf.stack([blur_neighbors_n1, blur_neighbors_n2], axis=-1) # [M * (d + 1), 2]
-        # blur_neighbors = tf.reshape(blur_neighbors, shape=[self.d + 1, self.M, 2]) # [M, d + 1, 2]
-
         # Shift all values by 1 such that -1 -> 0 (used for blurring)
         self.os.assign(tf.reshape(offsets, shape=[-1, ]) + 1)  # [N X (d + 1), ]
         self.ws.assign(tf.reshape(barycentric[..., : self.d + 1], shape=[-1, ]))  # [N x (d + 1), ]
-        # self.blur_neighbors = blur_neighbors + 1
         self.blur_neighbors.assign_add(tf.ones(shape=[self.d + 1, self.N, 2], dtype=tf.int32))
 
     @tf.function
