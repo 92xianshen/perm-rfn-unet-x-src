@@ -3,7 +3,7 @@ from PIL import Image
 # from permutohedral_tf_v5 import Permutohedral as PermutohedralTF
 # from permutohedral_tf_v2 import Permutohedral as PermutohedralTFV2
 # from permutohedral_numpified import Permutohedral as PermutohedralNP
-from permutohedralx import Permutohedral as PermutohedralXTF
+from permutohedralx import PermutohedralX as PermutohedralXTF
 import matplotlib.pyplot as plt
 import cv2
 import time
@@ -27,17 +27,17 @@ features = features.reshape((-1, 5))
 N, d = features.shape[0], features.shape[1]
 
 # TF impl.
-lattice_np = PermutohedralXTF(N, d)
+lattice = PermutohedralXTF(N, d)
 start = time.time()
-lattice_np.init(features)
+lattice.init(features)
 print('Lattice of TF initialized.')
 
 all_ones = np.ones((N, 1), dtype=np.float32)
-norms = lattice_np.compute(all_ones)
+norms = lattice.compute(all_ones)
 norms = norms.numpy().reshape((h, w, 1))
 
 src = im.reshape((-1, n_channels))
-dst = lattice_np.compute(src.astype(np.float32))
+dst = lattice.compute(src.astype(np.float32))
 dst = dst.numpy().reshape((h, w, n_channels))
 dst = dst / norms
 dst = (dst - dst.min()) / (dst.max() - dst.min() + 1e-5)

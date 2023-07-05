@@ -11,11 +11,10 @@ import numpy as np
 import tensorflow as tf
 
 
-class Permutohedral(tf.Module):
+class PermutohedralX(tf.Module):
     def __init__(self, N, d) -> None:
         super().__init__()
-        self.N, self.d = tf.constant(N, dtype=tf.int32), tf.constant(d, dtype=tf.int32)
-        self.M = tf.Variable(0, dtype=tf.int32, trainable=False)
+        self.N, self.d = tf.constant(N, dtype=tf.int32), tf.constant(d, dtype=tf.int32) # size and dimension
 
         canonical = np.zeros((d + 1, d + 1), dtype=np.int32)  # (d + 1, d + 1)
         for i in range(d + 1):
@@ -47,13 +46,16 @@ class Permutohedral(tf.Module):
         # Alpha is a magic scaling constant (write Andrew if you really wanna understand this)
         self.alpha = 1.0 / (1.0 + tf.pow(2.0, -tf.cast(d, dtype=tf.float32)))
 
-        d_mat = np.ones((d + 1,), dtype=np.short) * d  # (d + 1, )
-        d_mat = np.diag(d_mat)  # (d + 1, d + 1)
-        diagone = np.diag(np.ones(d + 1, dtype=np.short))  # (d + 1, d + 1)
+        # Helper constant values (matrices).
+        d_mat = np.ones((d + 1,), dtype=np.short) * d  # [d + 1, ]
+        d_mat = np.diag(d_mat)  # [d + 1, d + 1]
+        diagone = np.diag(np.ones(d + 1, dtype=np.short))  # [d + 1, d + 1]
         self.d_mat = tf.constant(d_mat, dtype=tf.int32)  # [d + 1, d + 1]
         self.diagone = tf.constant(diagone, dtype=tf.int32)  # [d + 1, d + 1]
 
-        self.blur_neighbors = tf.Variable(tf.constant(-1, dtype=tf.int32, shape=[2, self.N, self.d + 1]), trainable=False) # [N, (d + 1), 2]
+        # Variables
+        self.M = tf.Variable(0, dtype=tf.int32, trainable=False)
+        self.blur_neighbors = tf.Variable(tf.constant(-1, dtype=tf.int32, shape=[2, self.N, self.d + 1]), trainable=False) # [N, (d + 1), 2], allocate sufficient memory.
         self.os = tf.Variable(tf.zeros(shape=[self.N * (self.d + 1), ], dtype=tf.int32), trainable=False) # [N x (d + 1), ]
         self.ws = tf.Variable(tf.zeros(shape=[self.N * (self.d + 1), ], dtype=tf.float32), trainable=False)  # [N x (d + 1), ]
 
@@ -137,8 +139,8 @@ class Permutohedral(tf.Module):
         self.blur_neighbors[1, :self.M, ...].assign(hash_table.lookup(n2s)) # [M, d + 1]
 
         # Shift all values by 1 such that -1 -> 0 (used for blurring)
-        self.os.assign(tf.reshape(offsets, shape=[-1, ]) + 1)  # [N X (d + 1), ]
-        self.ws.assign(tf.reshape(barycentric[..., : self.d + 1], shape=[-1, ]))  # [N x (d + 1), ]
+        self.os.assign(tf.reshape(offsets, shape=[-1, ]) + 1)  # [N x (d + 1), ]
+        self.ws.assign(tf.reshape(barycentric[..., :self.d + 1], shape=[-1, ]))  # [N x (d + 1), ]
         self.blur_neighbors.assign_add(tf.ones(shape=[2, self.N, self.d + 1], dtype=tf.int32))
 
     @tf.function
