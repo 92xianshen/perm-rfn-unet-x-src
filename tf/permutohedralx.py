@@ -1,3 +1,5 @@
+# -*- coding: utf-8 -*-
+
 """
 - TF implementation of permutohedral lattice, channel-last as well.
 - `tf.float32` and `tf.int32` as default float and integer types, respectively.

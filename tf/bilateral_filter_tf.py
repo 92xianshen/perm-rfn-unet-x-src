@@ -1,6 +1,7 @@
 # -*- coding: utf-8 -*-
 
 import numpy as np
+import tensorflow as tf
 from PIL import Image
 # from permutohedral_tf_v5 import Permutohedral as PermutohedralTF
 # from permutohedral_tf_v2 import Permutohedral as PermutohedralTFV2
@@ -19,12 +20,19 @@ h, w, n_channels = im.shape
 invSpatialStdev = 1. / 5.
 invColorStdev = 1. / .25
 
-features = np.zeros((h, w, 5), dtype=np.float32)
-spatial_feat = np.mgrid[0:h, 0:w][::-1].transpose((1, 2, 0)) * invSpatialStdev
-color_feat = im * invColorStdev
-features[..., :2] = spatial_feat
-features[..., 2:] = color_feat
-features = features.reshape((-1, 5))
+# features = np.zeros((h, w, 5), dtype=np.float32)
+# spatial_feat = np.mgrid[0:h, 0:w][::-1].transpose((1, 2, 0)) * invSpatialStdev
+# color_feat = im * invColorStdev
+# features[..., :2] = spatial_feat
+# features[..., 2:] = color_feat
+# features = features.reshape((-1, 5))
+
+color_feat = tf.constant(im * invColorStdev, dtype=tf.float32)
+ys, xs = tf.meshgrid(tf.range(h), tf.range(w), indexing="ij")
+ys, xs = tf.cast(ys, dtype=tf.float32) * invSpatialStdev, tf.cast(xs, dtype=tf.float32) * invSpatialStdev
+features = tf.concat([xs[..., tf.newaxis], ys[..., tf.newaxis], color_feat], axis=-1)
+features = tf.reshape(features, shape=[-1, 5])
+print(features.shape)
 
 N, d = features.shape[0], features.shape[1]
 
