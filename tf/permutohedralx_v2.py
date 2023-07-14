@@ -7,6 +7,7 @@
 - Update of v3: refine the key size, d + 1 ->> d
 
 - 2023.07.04: Use `tf.lookup.StaticHashTable`.
+- 2023.07.14: Remove `tf.lookup.StaticHashTable`, external look-up.
 """
 
 import numpy as np
@@ -14,7 +15,10 @@ import tensorflow as tf
 
 
 class PermutohedralX(tf.Module):
-    def __init__(self, N, d) -> None:
+    def __init__(self, N: int, d: int) -> None:
+        """
+        Initialize the permutohedral lattice.
+        """
         super().__init__()
         self.N, self.d = tf.constant(N, dtype=tf.int32), tf.constant(d, dtype=tf.int32) # size and dimension
 
@@ -55,13 +59,15 @@ class PermutohedralX(tf.Module):
         self.d_mat = tf.constant(d_mat, dtype=tf.int32)  # [d + 1, d + 1]
         self.diagone = tf.constant(diagone, dtype=tf.int32)  # [d + 1, d + 1]
 
-        # Variables
-        self.M = tf.Variable(0, dtype=tf.int32, trainable=False)
-        self.blur_neighbors = tf.Variable(tf.constant(-1, dtype=tf.int32, shape=[2, self.N, self.d + 1]), trainable=False) # [N, (d + 1), 2], allocate sufficient memory.
-        self.os = tf.Variable(tf.zeros(shape=[self.N * (self.d + 1), ], dtype=tf.int32), trainable=False) # [N x (d + 1), ]
-        self.ws = tf.Variable(tf.zeros(shape=[self.N * (self.d + 1), ], dtype=tf.float32), trainable=False)  # [N x (d + 1), ]
+        # - 2023.07.14: Disable variables and use returns. 
+        # # Variables
+        # self.M = tf.Variable(0, dtype=tf.int32, trainable=False)
+        # self.blur_neighbors = tf.Variable(tf.constant(-1, dtype=tf.int32, shape=[2, self.N, self.d + 1]), trainable=False) # [2, N, (d + 1)], allocate sufficient memory.
+        # self.os = tf.Variable(tf.zeros(shape=[self.N * (self.d + 1), ], dtype=tf.int32), trainable=False) # [N x (d + 1), ]
+        # self.ws = tf.Variable(tf.zeros(shape=[self.N * (self.d + 1), ], dtype=tf.float32), trainable=False)  # [N x (d + 1), ]
 
-    @tf.function(input_signature=[tf.TensorSpec(shape=[None, None], dtype=tf.float32)])
+    @tf.function(input_signature=[
+        tf.TensorSpec(shape=[None, None], dtype=tf.float32)]) # of features, [N, d], float32
     def init(self, features):
         # Compute the simplex each feature lies in
         # !!! Shape of feature [N, d]
@@ -124,9 +130,13 @@ class PermutohedralX(tf.Module):
         coords_1d = tf.reduce_sum(keys * dims_key[tf.newaxis, ...], axis=1) # [N * (d + 1), ]
 
         coords_1d_uniq, offsets = tf.unique(coords_1d)
-        self.M.assign(tf.shape(coords_1d_uniq)[0])
+
+        # - 2023.07.14: Disable internal variables and use returns.
+        # self.M.assign(tf.shape(coords_1d_uniq)[0])
+        M = tf.shape(coords_1d_uniq)[0]
         # ->> `trial2`: Use hash table.
-        hash_table = tf.lookup.StaticHashTable(tf.lookup.KeyValueTensorInitializer(coords_1d_uniq, tf.range(self.M, dtype=tf.int32)), default_value=-1)
+        # - 2023.07.14: Disable internal hash table
+        # hash_table = tf.lookup.StaticHashTable(tf.lookup.KeyValueTensorInitializer(coords_1d_uniq, tf.range(self.M, dtype=tf.int32)), default_value=-1)
 
         # Find the neighbors of each lattice point
         # Get the number of vertices in the lattice
@@ -136,17 +146,30 @@ class PermutohedralX(tf.Module):
         n2s = tf.tile(coords_1d_uniq[:, tf.newaxis], [1, self.d + 1]) + tf.reduce_sum(dims_key, axis=0) # [M, d + 1]
         n1s = n1s + tf.reduce_sum((self.d_mat[tf.newaxis, ..., :self.d] + self.diagone[tf.newaxis, ..., :self.d]) * dims_key[tf.newaxis, tf.newaxis, ...], axis=-1) # [M, d + 1]
         n2s = n2s - tf.reduce_sum((self.d_mat[tf.newaxis, ..., :self.d] + self.diagone[tf.newaxis, ..., :self.d]) * dims_key[tf.newaxis, tf.newaxis, ...], axis=-1) # [M, d + 1]
+        ns = tf.stack([n1s, n2s], axis=0) # [2, M, d + 1]
 
-        self.blur_neighbors[0, :self.M, ...].assign(hash_table.lookup(n1s)) # [M, d + 1]
-        self.blur_neighbors[1, :self.M, ...].assign(hash_table.lookup(n2s)) # [M, d + 1]
+        # - 2023.07.14: Disable internal variables and use returns.
+        # self.blur_neighbors[0, :self.M, ...].assign(hash_table.lookup(n1s)) # [M, d + 1]
+        # self.blur_neighbors[1, :self.M, ...].assign(hash_table.lookup(n2s)) # [M, d + 1]
 
         # Shift all values by 1 such that -1 -> 0 (used for blurring)
-        self.os.assign(tf.reshape(offsets, shape=[-1, ]) + 1)  # [N x (d + 1), ]
-        self.ws.assign(tf.reshape(barycentric[..., :self.d + 1], shape=[-1, ]))  # [N x (d + 1), ]
-        self.blur_neighbors.assign_add(tf.ones(shape=[2, self.N, self.d + 1], dtype=tf.int32))
+        # self.os.assign(tf.reshape(offsets, shape=[-1, ]) + 1)  # [N x (d + 1), ]
+        # self.ws.assign(tf.reshape(barycentric[..., :self.d + 1], shape=[-1, ]))  # [N x (d + 1), ]
+        # self.blur_neighbors.assign_add(tf.ones(shape=[2, self.N, self.d + 1], dtype=tf.int32))
+        os = tf.reshape(offsets, shape=[-1, ]) + 1 # [N x (d + 1), ]
+        ws = tf.reshape(barycentric[..., :self.d + 1], shape=[-1, ]) # [N x (d + 1), ]
 
-    @tf.function(input_signature=[tf.TensorSpec(shape=[None, None], dtype=tf.float32), tf.TensorSpec(shape=[], dtype=tf.int32), tf.TensorSpec(shape=[], dtype=tf.bool)])
-    def seq_compute(self, inp, value_size, reverse):
+        return coords_1d_uniq, M, os, ws, ns
+
+    @tf.function(input_signature=[
+        tf.TensorSpec(shape=[None, None], dtype=tf.float32), # of inp, flatten, [N, value_size], float32
+        tf.TensorSpec(shape=[], dtype=tf.int32), # of value_size, [], tf.int32
+        tf.TensorSpec(shape=[None, ], dtype=tf.int32), # of os, [N x (d + 1), ], int32
+        tf.TensorSpec(shape=[None, ], dtype=tf.float32), # of ws, [N x (d + 1), ], float32
+        tf.TensorSpec(shape=[2, None, None], dtype=tf.int32), # of blur_neighbors, [2, M, (d + 1)], int32
+        tf.TensorSpec(shape=[], dtype=tf.int32), # of M, [], int32
+        tf.TensorSpec(shape=[], dtype=tf.bool)]) # of reverse, [], bool
+    def seq_compute(self, inp, value_size, os, ws, blur_neighbors, M, reverse):
         """
         Compute sequentially.
 
@@ -173,10 +196,10 @@ class PermutohedralX(tf.Module):
             ch_ext = tf.tile(ch[..., tf.newaxis], [1, self.d + 1])  # [N, (d + 1)]
             ch_flat = tf.reshape(ch_ext, shape=[-1, ])  # [N x (d + 1), ]
             val_ch = tf.math.bincount(
-                self.os,
-                weights=ch_flat * self.ws,
-                minlength=self.M + 2,
-                maxlength=self.M + 2,
+                os,
+                weights=ch_flat * ws,
+                minlength=M + 2,
+                maxlength=M + 2,
                 dtype=tf.float32,
             )
             return val_ch
@@ -186,11 +209,11 @@ class PermutohedralX(tf.Module):
 
         # ->> Blur
         j_range = tf.range(self.d, -1, -1) if reverse else tf.range(self.d + 1)
-        idx_nv = tf.range(1, self.M + 1)  # [M, ]
+        idx_nv = tf.range(1, M + 1)  # [M, ]
         
         for j in j_range:
-            n1s = self.blur_neighbors[0, :self.M, j]  # [M, ]
-            n2s = self.blur_neighbors[1, :self.M, j]  # [M, ]
+            n1s = blur_neighbors[0, ..., j]  # [M, ]
+            n2s = blur_neighbors[1, ..., j]  # [M, ]
             n1_vals = tf.gather(values, n1s)  # [M, value_size]
             n2_vals = tf.gather(values, n2s)  # [M, value_size]
 
@@ -201,15 +224,20 @@ class PermutohedralX(tf.Module):
             )
 
         # ->> Slice
-
-        out = self.ws[..., tf.newaxis] * tf.gather(values, self.os) * self.alpha
+        out = ws[..., tf.newaxis] * tf.gather(values, os) * self.alpha
         out = tf.reshape(out, shape=[self.N, self.d + 1, value_size])
         out = tf.reduce_sum(out, axis=1)
 
         return out
 
-    @tf.function(input_signature=[tf.TensorSpec(shape=[None, None], dtype=tf.float32), tf.TensorSpec(shape=[], dtype=tf.bool)])
-    def compute(self, inp, reverse=False):
+    @tf.function(input_signature=[
+        tf.TensorSpec(shape=[None, None], dtype=tf.float32), # of inp, flatten, [N, value_size], float32
+        tf.TensorSpec(shape=[None, ], dtype=tf.int32), # of os, [N x (d + 1), ], int32
+        tf.TensorSpec(shape=[None, ], dtype=tf.float32), # of ws, [N x (d + 1), ], float32
+        tf.TensorSpec(shape=[2, None, None], dtype=tf.int32), # of blur_neighbors, [2, M, (d + 1)], int32
+        tf.TensorSpec(shape=[], dtype=tf.int32), # of M, [], int32
+        tf.TensorSpec(shape=[], dtype=tf.bool)]) # of reverse, [], bool
+    def compute(self, inp, os, ws, blur_neighbors, M, reverse=False):
         size, n_ch = tf.shape(inp)[0], tf.shape(inp)[1]
-        out = self.seq_compute(inp, n_ch, reverse)
+        out = self.seq_compute(inp, n_ch, os, ws, blur_neighbors, M, reverse)
         return out

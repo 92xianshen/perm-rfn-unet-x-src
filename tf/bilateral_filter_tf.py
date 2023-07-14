@@ -38,6 +38,7 @@ N, d = features.shape[0], features.shape[1]
 
 # TF impl.
 lattice = PermutohedralXTF(N, d)
+print("Start...")
 start = time.time()
 lattice.init(features)
 print('Lattice of TF initialized.')
