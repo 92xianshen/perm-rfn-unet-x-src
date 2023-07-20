@@ -4,15 +4,16 @@ Fail.
 + 2023.07.17: Convert to SavedModel, for refinement test w.r.t. `examples/`.
 + 2023.07.18: Convert permutohedralx_v3_computation to SavedModel. 
 + 2023.07.19: Convert permutohedralx_v4_computation to SavedModel. 
++ 2023.07.20: Attempt to convert permutohedralx_v4 to SavedModel.
 """
 
 import tensorflow as tf
 
-from model_src.permutohedralx_v4_computation import PermutohedralXComputation
+from model_src.permutohedralx_v4 import PermutohedralX
 
-export_dir = "saved_model/permxv4_computation"
+export_dir = "saved_model/permxv4"
 
-lattice = PermutohedralXComputation(5)
+lattice = PermutohedralX("saved_model/permxv4_computation")
 
 tf.saved_model.save(lattice, export_dir=export_dir)
 print("Write to {}.".format(export_dir))
