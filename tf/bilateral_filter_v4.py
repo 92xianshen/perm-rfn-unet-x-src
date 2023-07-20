@@ -10,7 +10,7 @@ import matplotlib.pyplot as plt
 import cv2
 import time
 
-computation_path = "saved_model/permxv4_computation"
+computation_path = "saved_model/permx_v4_computation"
 
 # - Load data
 im = Image.open('../../data/lenna.png').convert("RGB")
@@ -32,7 +32,7 @@ print(features.shape)
 N, d = features.shape[0], features.shape[1]
 
 # Initialize class
-lattice = PermutohedralX(computation_path)
+lattice = PermutohedralX(d, computation_path)
 print("Start...")
 start = time.time()
 lattice.init(features)

@@ -10,9 +10,9 @@ import tensorflow as tf
 
 from model_src.permutohedralx_v4_computation import PermutohedralXComputation
 
-export_dir = "saved_model/permxv4_computation"
+export_dir = "saved_model/permx_v4_computation"
 
-lattice = PermutohedralXComputation(5)
+lattice = PermutohedralXComputation()
 
 tf.saved_model.save(lattice, export_dir=export_dir)
 print("Write to {}.".format(export_dir))
