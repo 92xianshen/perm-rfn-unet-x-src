@@ -128,7 +128,15 @@ dmypy.json
 # Pyre type checker
 .pyre/
 
-# Libin: Ignore tf.saved_model
+# Libin: Ignore tf.saved_model files.
 *.pb
-*.index
 *.data*
+*.index
+
+# Libin: Ignore checkpoint files and experimental results.
+checkpoint
+*.data*
+*.index
+*.npz
+*.png
+*.csv
